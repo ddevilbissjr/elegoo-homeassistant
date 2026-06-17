@@ -623,39 +623,48 @@ class ElegooFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     )
 
             if not printer_object:
-                LOGGER.warning("No printer found at IP address: %s", ip_address)
-                _errors["base"] = "no_printer_found"
-            else:
-                # Store discovered printer and external_ip for later steps
-                self.selected_printer = printer_object
-                self.selected_printer.external_ip = user_input.get(CONF_EXTERNAL_IP)
+                LOGGER.warning(
+                    "No printer found via discovery at %s — forcing direct WebSocket connection",
+                    ip_address,
+                )
+                printer_object = Printer()
+                printer_object.ip_address = ip_address
+                printer_object.name = f"Elegoo Printer ({ip_address})"
+                printer_object.model = "Centauri Carbon"
+                printer_object.transport_type = TransportType.WEBSOCKET
+                printer_object.printer_type = PrinterType.FDM
+                printer_object.id = "YOUR_MAINBOARD_ID"
 
-                # Check if already configured
-                await self.async_set_unique_id(unique_id=printer_object.id)
-                self._abort_if_unique_id_configured()
+            # Store discovered printer and external_ip for later steps
+            self.selected_printer = printer_object
+            self.selected_printer.external_ip = user_input.get(CONF_EXTERNAL_IP)
 
-                # Route based on transport type
-                if printer_object.transport_type == TransportType.CC2_MQTT:
-                    LOGGER.info("Routing to CC2 auth flow for manual IP entry")
-                    return await self.async_step_cc2_auth_check()
+            # Check if already configured
+            await self.async_set_unique_id(unique_id=printer_object.id)
+            self._abort_if_unique_id_configured()
 
-                if printer_object.transport_type == TransportType.MQTT:
-                    # MQTT printers auto-configure with embedded broker
-                    LOGGER.info("Auto-configuring MQTT printer from manual IP entry")
-                    printer_object.mqtt_broker_enabled = True
-                    printer_object.proxy_enabled = False
-                    return self.async_create_entry(
-                        title=printer_object.name or "Elegoo Printer",
-                        data=printer_object.to_dict(),
-                    )
+            # Route based on transport type
+            if printer_object.transport_type == TransportType.CC2_MQTT:
+                LOGGER.info("Routing to CC2 auth flow for manual IP entry")
+                return await self.async_step_cc2_auth_check()
 
-                # WebSocket/SDCP printers - route based on printer type
-                if printer_object.printer_type == PrinterType.RESIN:
-                    LOGGER.info("Routing to resin options for manual IP entry")
-                    return await self.async_step_resin_options()
+            if printer_object.transport_type == TransportType.MQTT:
+                # MQTT printers auto-configure with embedded broker
+                LOGGER.info("Auto-configuring MQTT printer from manual IP entry")
+                printer_object.mqtt_broker_enabled = True
+                printer_object.proxy_enabled = False
+                return self.async_create_entry(
+                    title=printer_object.name or "Elegoo Printer",
+                    data=printer_object.to_dict(),
+                )
 
-                LOGGER.info("Routing to FDM options for manual IP entry")
-                return await self.async_step_fdm_options()
+            # WebSocket/SDCP printers - route based on printer type
+            if printer_object.printer_type == PrinterType.RESIN:
+                LOGGER.info("Routing to resin options for manual IP entry")
+                return await self.async_step_resin_options()
+
+            LOGGER.info("Routing to FDM options for manual IP entry")
+            return await self.async_step_fdm_options()
 
         return self.async_show_form(
             step_id="manual_ip",

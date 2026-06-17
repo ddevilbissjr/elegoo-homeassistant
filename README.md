@@ -1,3 +1,9 @@
+> [!NOTE]
+> **This is a personal fork of [danielcherubini/elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant).**
+> See [Fork Changes](#-fork-changes--centauri-carbon-1-workaround) below for details.
+
+---
+
 # Elegoo Printers for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
@@ -155,3 +161,100 @@ Want to contribute code or help debug printer protocols? See the **[Development 
 - Windows setup (with troubleshooting for common issues)
 - Dev Container setup (VS Code + Docker)
 - Running the debug script to capture printer data
+
+---
+
+## 🔧 Fork Changes — Centauri Carbon 1 Workaround
+
+### Why this fork exists
+
+My **Elegoo Centauri Carbon 1** does not respond to the SDCP UDP discovery probe (the `M99999` broadcast/unicast sent to port 3000). This means that both auto-discovery and the "manual IP" config flow fail — even though the printer's **WebSocket service is fully operational** on port 3030.
+
+This fork patches the integration to bypass the SDCP probe entirely and connect directly to the WebSocket, which is what actually matters for all monitoring and control operations.
+
+---
+
+### Patches applied
+
+#### 1. `custom_components/elegoo_printer/config_flow.py` — skip discovery in the manual IP flow
+
+When UDP discovery returns nothing (and CC2 discovery also fails), instead of aborting with "No printer could be found", the patched flow constructs a minimal `Printer` stub directly from the entered IP address and proceeds to the FDM options screen.
+
+The stub requires two pieces of information specific to your machine:
+
+| Field | Value | Where to find it |
+|---|---|---|
+| `model` | `"Centauri Carbon"` | Hardcoded — ensures entities are registered correctly |
+| `id` (MainboardID) | Your printer's unique hex ID | See [Finding your MainboardID](#finding-your-mainboardid) below |
+
+#### 2. `custom_components/elegoo_printer/api.py` — replace UDP probe with TCP check (initial setup)
+
+The `async_create` method tested reachability by running the same UDP probe again at runtime. Replaced with a simple TCP connection attempt to port 3030. If the port is open the printer is considered reachable.
+
+#### 3. `custom_components/elegoo_printer/api.py` — replace UDP probe with TCP check (reconnect)
+
+Same replacement applied to the `reconnect` method so that reconnection attempts also don't depend on UDP.
+
+---
+
+### Finding your MainboardID
+
+The MainboardID is a hex string unique to your printer's mainboard (e.g. `a1b2c3d4e5f6`). The only confirmed way to retrieve it on the Centauri Carbon 1 is to open a WebSocket connection and send a Cmd 0 status request — the printer will respond and include its real ID in the response.
+
+#### How to get the MainboardID via Cmd 0
+
+**Step 1 — Install `wscat`**
+
+```bash
+npm install -g wscat
+```
+
+**Step 2 — Connect to the printer**
+
+```bash
+wscat -c ws://YOUR_PRINTER_IP:3030/websocket
+```
+
+You should see `Connected (press CTRL+C to quit)`. The prompt `>` means wscat is ready to send messages.
+
+**Step 3 — Send the Cmd 0 request**
+
+Paste the following as a single line at the `>` prompt and press Enter (the placeholder `MainboardID` and `Topic` values don't matter — the printer still responds):
+
+```json
+{"Id":"homeassistant","Data":{"Cmd":0,"Data":{},"RequestID":"test-001","MainboardID":"unknown","TimeStamp":1700000000,"From":0},"Topic":"sdcp/request/unknown"}
+```
+
+**Step 4 — Read the response**
+
+The printer will reply with a message like:
+
+```json
+{
+  "Topic": "sdcp/response/a1b2c3d4e5f6",
+  "Data": {
+    "Cmd": 0,
+    "Data": { "...": "full printer status" },
+    "MainboardID": "a1b2c3d4e5f6"
+  }
+}
+```
+
+The value of `MainboardID` (and the last segment of `Topic`) is your printer's ID. Copy it — this is what you put in `printer_object.id` in the patched `config_flow.py`.
+
+---
+
+### Full setup steps for Centauri Carbon 1
+
+1. **Find your MainboardID** using one of the methods above.
+2. **Edit** `custom_components/elegoo_printer/config_flow.py` on your HA instance and set:
+   ```python
+   printer_object.id = "YOUR_MAINBOARD_ID_HERE"
+   ```
+3. **Restart** Home Assistant.
+4. Go to **Settings → Devices & Services → Add Integration → Elegoo Printers**.
+5. Enter your printer's IP address in the **Manual Setup** screen (in both fields).
+6. Complete the FDM options screen (proxy is not required).
+7. The integration will connect via WebSocket and all entities (temperatures, light, fans, etc.) will become available.
+
+> **Note:** If you remove and re-add the integration, repeat step 2 first — the MainboardID stub in `config_flow.py` is required every time the config entry is created from scratch.

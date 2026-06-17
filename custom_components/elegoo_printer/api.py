@@ -312,8 +312,18 @@ class ElegooPrinterApiClient:
                 )
                 printer_reachable = False
         else:
-            # For WebSocket, discover and test printer directly
-            printer_reachable = await self._discover_printer_with_fallback(printer)
+            # For WebSocket, test TCP reachability on the WebSocket port directly
+            # (avoids UDP SDCP probe which some printers like Centauri Carbon 1 don't respond to)
+            try:
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(printer.ip_address, 3030),
+                    timeout=5.0,
+                )
+                writer.close()
+                await writer.wait_closed()
+                printer_reachable = True
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                printer_reachable = False
 
         if not printer_reachable:
             logger.warning(
@@ -455,8 +465,19 @@ class ElegooPrinterApiClient:
             except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
                 printer_reachable = False
         else:
-            # For WebSocket, discover and test printer
-            printer_reachable = await self._discover_printer_with_fallback(printer)
+            # For WebSocket, test TCP reachability on the WebSocket port directly
+            # (avoids UDP SDCP probe which some printers like Centauri Carbon 1 don't respond to)
+            try:
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(printer.ip_address, 3030),
+                    timeout=5.0,
+                )
+                writer.close()
+                await writer.wait_closed()
+                printer_reachable = True
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                printer_reachable = False
+
 
         if not printer_reachable:
             self._logger.debug(
