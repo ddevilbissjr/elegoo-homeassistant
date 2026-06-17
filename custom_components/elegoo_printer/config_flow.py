@@ -25,6 +25,7 @@ from .const import (
     CONF_CC2_ACCESS_CODE,
     CONF_EXTERNAL_IP,
     CONF_GCODE_PROXY_URL,
+    CONF_ID,
     CONF_PROXY_ENABLED,
     DOMAIN,
     LOGGER,
@@ -114,6 +115,13 @@ MANUAL_IP_SCHEMA = vol.Schema(
     {
         vol.Required(
             CONF_IP_ADDRESS,
+        ): selector.TextSelector(
+            selector.TextSelectorConfig(
+                type=selector.TextSelectorType.TEXT,
+            ),
+        ),
+        vol.Optional(
+            CONF_ID,
         ): selector.TextSelector(
             selector.TextSelectorConfig(
                 type=selector.TextSelectorType.TEXT,
@@ -623,9 +631,20 @@ class ElegooFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     )
 
             if not printer_object:
+                mainboard_id = (user_input.get(CONF_ID) or "").strip()
+                if not mainboard_id:
+                    _errors["base"] = "manual_ip_mainboard_id_required"
+                    return self.async_show_form(
+                        step_id="manual_ip",
+                        data_schema=self.add_suggested_values_to_schema(
+                            MANUAL_IP_SCHEMA, user_input
+                        ),
+                        errors=_errors,
+                    )
                 LOGGER.warning(
-                    "No printer found via discovery at %s — forcing direct WebSocket connection",
+                    "No printer found via discovery at %s — forcing direct WebSocket connection with mainboard ID %s",
                     ip_address,
+                    mainboard_id,
                 )
                 printer_object = Printer()
                 printer_object.ip_address = ip_address
@@ -633,7 +652,7 @@ class ElegooFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 printer_object.model = "Centauri Carbon"
                 printer_object.transport_type = TransportType.WEBSOCKET
                 printer_object.printer_type = PrinterType.FDM
-                printer_object.id = "YOUR_MAINBOARD_ID"
+                printer_object.id = mainboard_id
 
             # Store discovered printer and external_ip for later steps
             self.selected_printer = printer_object

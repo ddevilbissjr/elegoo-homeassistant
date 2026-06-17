@@ -60,9 +60,11 @@
         "description": "Enter the IP address of your Elegoo printer. The integration will automatically detect the printer type and guide you through the appropriate setup steps.",
         "data": {
           "ip_address": "Printer IP Address",
+          "id": "Mainboard ID (optional — required if auto-discovery fails)",
           "external_ip": "External Address (optional, for advanced network setups)"
         },
         "data_description": {
+          "id": "Your printer's unique mainboard hex ID. Only needed if auto-discovery fails (e.g. Centauri Carbon 1). Connect via WebSocket and send a Cmd 0 request to retrieve it — see the README for details.",
           "external_ip": "Override auto-detected address with an IP address or hostname. Leave blank for automatic detection. Use for Kubernetes/Docker setups or when behind a reverse proxy. Ports 3030 and 3031 will be appended automatically."
         }
       },
@@ -107,6 +109,7 @@
       "unknown": "Unknown error occurred.",
       "invalid_printer_selection": "Invalid printer selection.",
       "no_printer_found": "No printer could be found at the specified IP address.",
+      "manual_ip_mainboard_id_required": "Auto-discovery failed. Enter your printer's Mainboard ID to connect directly (see README for how to retrieve it).",
       "validation_no_printer_found": "Validation failed: No printer was found.",
       "no_printer_selected_or_ip_provided": "Please select a discovered printer or provide an IP address.",
       "manual_options_no_printer_found": "The selected printer could not be found to apply options.",
